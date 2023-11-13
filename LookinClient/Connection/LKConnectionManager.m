@@ -13,6 +13,7 @@
 #import "LKPreferenceManager.h"
 #import "LookinAppInfo.h"
 #import "LKConnectionRequest.h"
+#import "LKServerVersionRequestor.h"
 #import "ECOChannelManager.h"
 
 static NSIndexSet * PushFrameTypeList() {
@@ -20,7 +21,6 @@ static NSIndexSet * PushFrameTypeList() {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         NSMutableIndexSet *set = [NSMutableIndexSet indexSet];
-        [set addIndex:LookinPush_MethodTraceRecord];
         list = set.copy;
     });
     return list;
@@ -127,6 +127,8 @@ static NSIndexSet * PushFrameTypeList() {
 		
 		[self _startListeningForWirelessDevices];
         [self _startListeningForUSBDevices];
+        
+        [[LKServerVersionRequestor shared] preload];
     }
     return self;
 }
@@ -307,25 +309,10 @@ static NSIndexSet * PushFrameTypeList() {
 
 - (NSError *)_checkServerVersionWithResponse:(LookinConnectionResponseAttachment *)pingResponse {
     int serverVersion = pingResponse.lookinServerVersion;
-    BOOL serverIsExprimental = [pingResponse respondsToSelector:@selector(lookinServerIsExprimental)] && pingResponse.lookinServerIsExprimental;
     if (serverVersion == -1 || serverVersion == 100) {
         // 说明用的还是旧版本的内部版本 LookinServer，这里兼容一下
         NSError *versionErr = [NSError errorWithDomain:LookinErrorDomain code:LookinErrCode_ServerVersionTooLow userInfo:@{NSLocalizedDescriptionKey:NSLocalizedString(@"Fail to inspect this iOS app due to a version problem.", nil), NSLocalizedRecoverySuggestionErrorKey:NSLocalizedString(@"Please update LookinServer.framework linked with target iOS App to a newer version. Visit the website below to get detailed instructions:\nhttps://lookin.work/faq/server-version-too-low/", nil)}];
         return versionErr;
-    }
-    
-    if (LOOKIN_CLIENT_IS_EXPERIMENTAL && !serverIsExprimental) {
-        // client 是私有版本，framework 是官网版本
-        NSError *versionErr = [NSError errorWithDomain:LookinErrorDomain code:LookinErrCode_ClientIsPrivate userInfo:nil];
-        return versionErr;
-    
-    }
-    
-    if (!LOOKIN_CLIENT_IS_EXPERIMENTAL && serverIsExprimental) {
-        // client 是现网版本，framework 是私有版本
-        NSError *versionErr = [NSError errorWithDomain:LookinErrorDomain code:LookinErrCode_ServerIsPrivate userInfo:nil];
-        return versionErr;
-        
     }
     
     if (serverVersion > LOOKIN_SUPPORTED_SERVER_MAX) {

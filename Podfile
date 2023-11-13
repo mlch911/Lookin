@@ -1,25 +1,23 @@
 use_frameworks!
 
-inhibit_all_warnings!
+#inhibit_all_warnings!
 
 target 'LookinClient' do
-    platform :osx, '10.14'
+    platform :osx, '11.0'
     pod 'AppCenter'
     pod 'ReactiveObjC', '3.1.0'
     pod 'Sparkle', '~> 1.0'
-    pod 'LookinShared', :git=>'https://github.com/QMUI/LookinServer.git', :branch => 'feature/wireless'
-    pod 'LookinShared/Wireless', :git=>'https://github.com/QMUI/LookinServer.git', :branch => 'feature/wireless'
+    pod 'LookinShared', :git=>'https://github.com/mlch911/LookinServer.git'
+    pod 'LookinShared/Wireless', :git=>'https://github.com/mlch911/LookinServer.git'
 #    pod 'LookinShared', :path=>'../LookinServer/'
 #    pod 'LookinShared/Wireless', :path=>'../LookinServer/'
 end
 
-target 'LookinTestflight' do
-    platform :osx, '10.14'
-    pod 'AppCenter'
-    pod 'ReactiveObjC', '3.1.0'
-    pod 'Sparkle', '~> 1.0'
-    pod 'LookinShared', :git=>'https://github.com/QMUI/LookinServer.git', :branch => 'feature/wireless'
-    pod 'LookinShared/Wireless', :git=>'https://github.com/QMUI/LookinServer.git', :branch => 'feature/wireless'
-#    pod 'LookinShared', :path=>'../LookinServer/'
-#    pod 'LookinShared/Wireless', :path=>'../LookinServer/'
+# ReactiveObjc 之类的 SDK 的 deployment target 太低了导致无法编译，所以这里改成以项目为准
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings.delete 'MACOSX_DEPLOYMENT_TARGET'
+    end
+  end
 end

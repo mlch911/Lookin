@@ -163,7 +163,7 @@
         return;
     }
     
-    NSString *title = [LookinDashboardBlueprint sectionTitleWithSectionID:attrSection.identifier];
+    NSString *title = [self resolveSectionTitle];
     if (title.length) {
         if (self.titleLabel) {
             self.titleLabel.hidden = NO;
@@ -178,22 +178,19 @@
         self.titleLabel.hidden = YES;
     }
     
-    NSMutableArray<LKDashboardAttributeView *> *needlessViews = [self.attrViews mutableCopy];
+    NSMutableArray<LKDashboardAttributeView *> *notUsedViews = [self.attrViews mutableCopy];
     
-    NSArray<LookinAttrIdentifier> *attrIDs = [LookinDashboardBlueprint attrIDsForSectionID:attrSection.identifier];
-    [attrIDs enumerateObjectsUsingBlock:^(LookinAttrIdentifier _Nonnull attrID, NSUInteger idx, BOOL * _Nonnull stop) {
-        LookinAttribute *attr = [attrSection.attributes lookin_firstFiltered:^BOOL(LookinAttribute *obj) {
-            return [obj.identifier isEqualToString:attrID];
-        }];
-        if (!attr) {
+    [self.attrSection.attributes enumerateObjectsUsingBlock:^(LookinAttribute * _Nonnull attr, NSUInteger idx, BOOL * _Nonnull stop) {
+        Class attrViewClass = [self _targetAttrClassForType:attr.attrType identifier:attr.identifier];
+        if (!attrViewClass) {
+            NSAssert(NO, @"");
             return;
         }
-        Class attrViewClass = [self _targetAttrClassForType:attr.attrType identifier:attr.identifier];
-        LKDashboardAttributeView *view = [needlessViews lookin_firstFiltered:^BOOL(LKDashboardAttributeView *obj) {
-            return  [obj isMemberOfClass:attrViewClass];
+        LKDashboardAttributeView *view = [notUsedViews lookin_firstFiltered:^BOOL(LKDashboardAttributeView *obj) {
+            return [obj isMemberOfClass:attrViewClass];
         }];
         if (view) {
-            [needlessViews removeObject:view];
+            [notUsedViews removeObject:view];
             view.hidden = NO;
         } else {
             view = [attrViewClass new];
@@ -204,7 +201,7 @@
         view.attribute = attr;
     }];
     
-    [needlessViews enumerateObjectsUsingBlock:^(LKDashboardAttributeView * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+    [notUsedViews enumerateObjectsUsingBlock:^(LKDashboardAttributeView * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
         obj.hidden = YES;
     }];
     
@@ -233,10 +230,11 @@
         case LookinAttrTypeDouble:
         case LookinAttrTypeLong:
             return [LKDashboardAttributeNumberInputView class];
-        case  LookinAttrTypeUIColor:
+        case LookinAttrTypeUIColor:
             return [LKDashboardAttributeColorView class];
         case LookinAttrTypeEnumInt:
         case LookinAttrTypeEnumLong:
+        case LookinAttrTypeEnumString:
             return [LKDashboardAttributeEnumsView class];
         case LookinAttrTypeCGPoint:
             return [LKDashboardAttributePointView class];
@@ -307,6 +305,26 @@
         [manager hideSection:self.attrSection.identifier];
     } else {
         NSAssert(NO, @"");
+    }
+}
+
+- (NSString *)resolveSectionTitle {
+    if (!self.attrSection.isUserCustom) {
+        return [LookinDashboardBlueprint sectionTitleWithSectionID:self.attrSection.identifier];
+    }
+    LookinAttribute *attr = self.attrSection.attributes.firstObject;
+    if (!attr) {
+        NSAssert(NO, @"");
+        return nil;
+    }
+    switch (attr.attrType) {
+        case LookinAttrTypeNSString:
+        case LookinAttrTypeUIColor:
+        case LookinAttrTypeEnumString:
+        case LookinAttrTypeDouble:
+            return attr.displayTitle;
+        default:
+            return nil;
     }
 }
 

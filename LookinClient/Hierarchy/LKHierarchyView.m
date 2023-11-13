@@ -32,7 +32,7 @@ extern NSString *const LKAppShowConsoleNotificationName;
 
 @property(nonatomic, strong) LKLabel *emptyDataLabel;
 
-@property(nonatomic, strong) LKTipsView *focusView;
+@property(nonatomic, copy) NSArray<LookinDisplayItem *> *displayItems;
 
 @property(nonatomic, assign) NSInteger minIndentLevel;
 
@@ -40,24 +40,15 @@ extern NSString *const LKAppShowConsoleNotificationName;
 
 @implementation LKHierarchyView
 
-- (instancetype)initWithFrame:(NSRect)frameRect {
-    if (self = [super initWithFrame:frameRect]) {        
+- (instancetype)initWithDataSource:(LKHierarchyDataSource *)dataSource {
+    if (self = [super initWithFrame:CGRectZero]) {
+        self.dataSource = dataSource;
+        
         self.backgroundEffectView = [LKVisualEffectView new];
         self.backgroundEffectView.material = NSVisualEffectMaterialSidebar;
         self.backgroundEffectView.blendingMode = NSVisualEffectBlendingModeBehindWindow;
         self.backgroundEffectView.state = NSVisualEffectStateActive;
         [self addSubview:self.backgroundEffectView];
-
-        _focusView = [LKTipsView new];
-        _focusView.hidden = true;
-        _focusView.title = NSLocalizedString(@"Focused", nil);
-        _focusView.buttonImage = NSImageMake(@"icon_close");
-        _focusView.backgroundColor = [NSColor clearColor];
-        _focusView.button.imagePosition = NSImageTrailing;
-        _focusView.target = self;
-        _focusView.clickAction = @selector(_handleCancelFocus);
-        [_focusView setInternalInsetsRight:12];
-        [self addSubview:self.focusView];
 
         _tableView = [LKTableView new];
         self.tableView.adjustsSelectionAutomatically = NO;
@@ -103,10 +94,40 @@ extern NSString *const LKAppShowConsoleNotificationName;
             CGFloat insetTop = [x edgeInsetsValue].top;
             [LKNavigationManager sharedInstance].windowTitleBarHeight = insetTop;
         }];
-    
-        [[RACObserve(self, displayItems) throttle:.75] subscribeNext:^(id  _Nullable x) {
+        
+        [RACObserve(dataSource, selectedItem) subscribeNext:^(LookinDisplayItem * _Nullable item) {
+            @strongify(self);
+            [self.tableView reloadDataWithOffset];
+            [self scrollToMakeItemVisible:item];
+        }];
+        
+        [[RACObserve(self.dataSource, hoveredItem) distinctUntilChanged] subscribeNext:^(LookinDisplayItem * _Nullable x) {
+            @strongify(self);
+            [self updateGuidesWithHoveredItem:x];
+        }];
+        
+        [RACObserve(dataSource, displayingFlatItems) subscribeNext:^(NSArray<LookinDisplayItem *> *x) {
+            @strongify(self);
+            [self renderWithDisplayItems:x];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [self updateGuidesWithHoveredItem:self.dataSource.hoveredItem];
+            });
+        }];
+        [[RACObserve(dataSource, displayingFlatItems) throttle:.75] subscribeNext:^(id  _Nullable x) {
             @strongify(self);
             [self _bringGuidesLayerToFront];
+        }];
+        [RACObserve(dataSource, state) subscribeNext:^(NSNumber *x) {
+            @strongify(self);
+            // 隐藏搜索功能，避免同时处于 focus 和 search 状态，从而避免状态维护太过复杂
+            LKHierarchyDataSourceState state = x.unsignedIntegerValue;
+            BOOL isFocus = (state == LKHierarchyDataSourceStateFocus);
+            self.searchTextFieldView.hidden = isFocus;
+            
+            if (isFocus && self.searchTextFieldView.textField.stringValue.length > 0) {
+                self.searchTextFieldView.textField.stringValue = @"";
+                [self.window makeFirstResponder:nil];
+            }
         }];
         
         [self updateColors];
@@ -119,17 +140,8 @@ extern NSString *const LKAppShowConsoleNotificationName;
     $(self.backgroundEffectView).fullFrame;
     $(self.searchTextFieldView).fullWidth.height(25).bottom(0);
 
-    if (self.focusView.hidden) {
-        $(self.tableView).fullFrame.y(self.searchTextFieldView.$y);
-        $(self.tableView).fullFrame.toMaxY(self.searchTextFieldView.$y);
-    } else {
-        if (@available(macOS 11.0, *)) {
-            $(self.focusView).fullWidth.height(25).y(self.safeAreaInsets.top);
-        } else {
-            $(self.focusView).fullWidth.height(25).y(52);
-        }
-        $(self.tableView).fullFrame.y(self.focusView.$maxY).toMaxY(self.searchTextFieldView.$y);
-    }
+    $(self.tableView).fullFrame.y(self.searchTextFieldView.$y);
+    $(self.tableView).fullFrame.toMaxY(self.searchTextFieldView.$y);
 
     $(self.guidesShapeLayer).frame(CGRectZero);
     
@@ -138,8 +150,9 @@ extern NSString *const LKAppShowConsoleNotificationName;
     }
 }
 
-- (void)setDisplayItems:(NSArray<LookinDisplayItem *> *)displayItems {
-    _displayItems = displayItems.copy;
+- (void)renderWithDisplayItems:(NSArray<LookinDisplayItem *> *)displayItems {
+    self.displayItems = displayItems;
+    
     _minIndentLevel = [[displayItems lookin_reduce:^NSNumber *(NSNumber *accumulator, NSUInteger idx, LookinDisplayItem *obj) {
         NSInteger res = accumulator ? MIN(accumulator.integerValue, obj.indentLevel):obj.indentLevel;
         return @(res);
@@ -191,20 +204,6 @@ extern NSString *const LKAppShowConsoleNotificationName;
     [self.searchTextFieldView.textField becomeFirstResponder];
 }
 
-- (void)activateFocused {
-    self.focusView.hidden = false;
-
-    self.needsLayout = true;
-    [self layoutSubtreeIfNeeded];
-}
-
-- (void)deactivateFocused {
-    self.focusView.hidden = true;
-
-    self.needsLayout = true;
-    [self layoutSubtreeIfNeeded];
-}
-
 #pragma mark - NSTableView
 
 - (void)tableView:(LKTableView *)tableView didHoverAtRow:(NSInteger)row {
@@ -233,7 +232,7 @@ extern NSString *const LKAppShowConsoleNotificationName;
     
     LKHierarchyRowView *view = [tableView makeViewWithIdentifier:@"cell" owner:self];
     if (!view) {
-        view = [[LKHierarchyRowView alloc] init];
+        view = [[LKHierarchyRowView alloc] initWithDataSource:self.dataSource];
         view.disclosureButton.target = self;
         view.disclosureButton.action = @selector(_handleDisclosureButton:);
         view.identifier = @"cell";
@@ -284,22 +283,23 @@ extern NSString *const LKAppShowConsoleNotificationName;
     
     [menu removeAllItems];
 
-    [menu addItem:({
-        NSMenuItem *item = [NSMenuItem new];
-        item.target = self;
-        item.action = @selector(_handlePrintItem:);
-        item.title = NSLocalizedString(@"PrintItem", nil);
-        item;
-    })];
-
-    [menu addItem:({
-        NSMenuItem *item = [NSMenuItem new];
-        item.target = self;
-        item.action = @selector(_handleFocusCurrentItem:);
-        item.title = NSLocalizedString(@"FocusItem", nil);
-        item;
-    })];
-    [menu addItem:[NSMenuItem separatorItem]];
+    if (!displayItem.isUserCustom) {
+        [menu addItem:({
+            NSMenuItem *item = [NSMenuItem new];
+            item.target = self;
+            item.action = @selector(_handleFocusCurrentItem:);
+            item.title = NSLocalizedString(@"Focus", nil);
+            item;
+        })];
+        [menu addItem:({
+            NSMenuItem *item = [NSMenuItem new];
+            item.target = self;
+            item.action = @selector(_handlePrintItem:);
+            item.title = NSLocalizedString(@"Print", nil);
+            item;
+        })];
+        [menu addItem:[NSMenuItem separatorItem]];        
+    }
 
     if (displayItem.isExpandable) {
         [menu addItem:({
@@ -321,26 +321,28 @@ extern NSString *const LKAppShowConsoleNotificationName;
     // 显示和隐藏图像
     [menu addItem:[NSMenuItem separatorItem]];
     
-    if (displayItem.inNoPreviewHierarchy) {
-        [menu addItem:({
-            NSMenuItem *item = [NSMenuItem new];
-            item.target = self;
-            item.action = @selector(_handleShowPreview:);
-            if (displayItem.doNotFetchScreenshotReason == LookinFetchScreenshotPermitted) {
-                item.title = NSLocalizedString(@"Show screenshot", nil);
-            } else {
-                item.title = NSLocalizedString(@"Show layer border", nil);
-            }
-            item;
-        })];
-    } else {
-        [menu addItem:({
-            NSMenuItem *item = [NSMenuItem new];
-            item.target = self;
-            item.action = @selector(_handleCancelPreview:);
-            item.title = NSLocalizedString(@"Hide screenshot this time", nil);
-            item;
-        })];
+    if ([displayItem hasPreviewBoxAbility]) {
+        if (displayItem.inNoPreviewHierarchy) {
+            [menu addItem:({
+                NSMenuItem *item = [NSMenuItem new];
+                item.target = self;
+                item.action = @selector(_handleShowPreview:);
+                if (displayItem.doNotFetchScreenshotReason == LookinFetchScreenshotPermitted) {
+                    item.title = NSLocalizedString(@"Show screenshot", nil);
+                } else {
+                    item.title = NSLocalizedString(@"Show layer border", nil);
+                }
+                item;
+            })];
+        } else {
+            [menu addItem:({
+                NSMenuItem *item = [NSMenuItem new];
+                item.target = self;
+                item.action = @selector(_handleCancelPreview:);
+                item.title = NSLocalizedString(@"Hide screenshot this time", nil);
+                item;
+            })];
+        }
     }
     
     if (displayItem.groupScreenshot) {
@@ -401,7 +403,7 @@ extern NSString *const LKAppShowConsoleNotificationName;
         })];
     }];
     
-    if (!displayItem.inNoPreviewHierarchy) {
+    if (!displayItem.isUserCustom && !displayItem.inNoPreviewHierarchy) {
         [menu addItem:[NSMenuItem separatorItem]];
         [menu addItem:({
             NSMenuItem *item = [NSMenuItem new];
@@ -434,10 +436,11 @@ extern NSString *const LKAppShowConsoleNotificationName;
 - (void)_handleFocusCurrentItem:(NSMenuItem *)menuItem {
     LKHierarchyRowView *view = [menuItem.menu lookin_getBindObjectForKey:kMenuBindKey_RowView];
     LookinDisplayItem *item = view.displayItem;
-    NSAssert(item, @"");
-    if ([self.delegate respondsToSelector:@selector(hierarchyView:shouldFocusItem:)]) {
-        [self.delegate hierarchyView:self shouldFocusItem:item];
+    if (!item) {
+        NSAssert(NO, @"");
+        return;
     }
+    [self.dataSource focusDisplayItem:item];
 }
 
 - (void)_handleSearchCloseButton {
@@ -515,12 +518,6 @@ extern NSString *const LKAppShowConsoleNotificationName;
 
 - (void)_handleHideScreenshotForever {
     [LKHelper openCustomConfigWebsite];
-}
-
-- (void)_handleCancelFocus {
-    if ([self.delegate respondsToSelector:@selector(cancelFocusedOnHierarchyView:)]) {
-        [self.delegate cancelFocusedOnHierarchyView:self];
-    }
 }
 
 #pragma mark - Guides
