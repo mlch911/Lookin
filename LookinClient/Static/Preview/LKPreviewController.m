@@ -19,7 +19,7 @@
 #import "LKNavigationManager.h"
 #import "LKTutorialManager.h"
 #import "LKStaticViewController.h"
-#import "LookinPreviewView.h"
+#import "LKPreviewView.h"
 #import "LKUserActionManager.h"
 #import "LKHierarchyDataSource+KeyDown.h"
 
@@ -34,7 +34,7 @@ extern NSString *const LKAppShowConsoleNotificationName;
 @property(nonatomic, strong) LKHierarchyDataSource *dataSource;
 
 @property(nonatomic, strong) LKPreviewStageView *stageView;
-@property(nonatomic, strong) LookinPreviewView *previewView;
+@property(nonatomic, strong) LKPreviewView *previewView;
 
 /// 按住 space 时可以通过 pan 来移动图像
 @property(nonatomic, assign) BOOL isKeyingDownSpace;
@@ -62,7 +62,7 @@ extern NSString *const LKAppShowConsoleNotificationName;
         
         LookinAppInfo *appInfo = dataSource.rawHierarchyInfo.appInfo;
         
-        self.previewView = [LookinPreviewView new];
+        self.previewView = [[LKPreviewView alloc] initWithDataSource:dataSource];
         self.previewView.preferenceManager = self.dataSource.preferenceManager;
         self.previewView.alphaValue = 0;
         self.previewView.appScreenSize = CGSizeMake(appInfo.screenWidth, appInfo.screenHeight);
@@ -74,7 +74,6 @@ extern NSString *const LKAppShowConsoleNotificationName;
             self.previewView.isDarkMode = isDarkMode;
         };
         [self.view addSubview:self.previewView];
-        
 
         // 这里通过 [RACSignal return:nil] 来立即执行一次渲染
         [[RACSignal merge:@[[RACSignal return:nil],
@@ -82,12 +81,18 @@ extern NSString *const LKAppShowConsoleNotificationName;
                             self.dataSource.itemDidChangeNoPreview]] subscribeNext:^(id  _Nullable x) {
             @strongify(self);
             NSArray<LookinDisplayItem *> *validItems = [dataSource.flatItems lookin_filter:^BOOL(LookinDisplayItem *obj) {
-                return !obj.inNoPreviewHierarchy;
+                if (obj.inNoPreviewHierarchy) {
+                    return NO;
+                }
+                if (obj.customInfo) {
+                    return [obj.customInfo hasValidFrame];
+                }
+                return YES;
             }];
             [self.previewView renderWithDisplayItems:validItems discardCache:YES];
         }];
         
-        [self.dataSource.didReloadFlatItemsWithSearch subscribeNext:^(id  _Nullable x) {
+        [self.dataSource.didReloadFlatItemsWithSearchOrFocus subscribeNext:^(id  _Nullable x) {
             @strongify(self);
             NSArray<LookinDisplayItem *> *validItems = [dataSource.flatItems lookin_filter:^BOOL(LookinDisplayItem *obj) {
                 return !obj.inNoPreviewHierarchy;
@@ -452,21 +457,30 @@ extern NSString *const LKAppShowConsoleNotificationName;
     
     NSPoint point = [recognizer locationInView:self.previewView];
     LookinDisplayItem *item = [self.previewView displayItemAtPoint:point];
-    
-    TutorialMng.doubleClick = YES;
-    if (self.staticViewController.isShowingDoubleClickTutorialTips) {
-        [self.staticViewController removeTutorialTips];
-    }
-    
     if (!item.displayingInHierarchy) {
         return;
     }
-    if (item.isExpandable) {
-        if (item.isExpanded) {
-            [self.dataSource collapseItem:item];
-        } else {
-            [self.dataSource expandItem:item];
+    
+    BOOL hasShowedAsk = [LKPreferenceManager popupToAskDoubleClickBehaviorIfNeededWithWindow:self.view.window];
+    if (hasShowedAsk) {
+        return;
+    }
+    
+    LookinDoubleClickBehavior behavior = [[LKPreferenceManager mainManager] doubleClickBehavior];
+    if (behavior == LookinDoubleClickBehaviorCollapse) {
+        if (item.isExpandable) {
+            if (item.isExpanded) {
+                [self.dataSource collapseItem:item];
+            } else {
+                [self.dataSource expandItem:item];
+            }
         }
+        
+    } else if (behavior == LookinDoubleClickBehaviorFocus) {
+        [self.dataSource focusDisplayItem:item];
+        
+    } else {
+        NSAssert(NO, @"");
     }
 }
 
@@ -606,39 +620,56 @@ extern NSString *const LKAppShowConsoleNotificationName;
     NSMenu *menu = [NSMenu new];
     menu.autoenablesItems = NO;
     menu.delegate = self;
+    return menu;
+}
 
-    [menu addItem:({
-        NSMenuItem *item = [NSMenuItem new];
-        item.target = self;
-        item.action = @selector(_handlePrintItem:);
-        item.title = NSLocalizedString(@"PrintItem", nil);
-        item;
-    })];
-    [menu addItem:({
-        NSMenuItem *item = [NSMenuItem new];
-        item.target = self;
-        item.action = @selector(_handleFocusCurrentItem:);
-        item.title = NSLocalizedString(@"FocusItem", nil);
-        item;
-    })];
-    [menu addItem:[NSMenuItem separatorItem]];
-
-    [menu addItem:({
-        NSMenuItem *item = [NSMenuItem new];
-        item.target = self;
-        item.action = @selector(_handleExpandRecursively:);
-        item.title = NSLocalizedString(@"Expand recursively", nil);
-        item;
-    })];
-    [menu addItem:({
-        NSMenuItem *item = [NSMenuItem new];
-        item.target = self;
-        item.action = @selector(_handleCollapseChildren:);
-        item.title = NSLocalizedString(@"Collapse children", nil);
-        item;
-    })];
+- (void)menuNeedsUpdate:(NSMenu *)menu {
+    [menu removeAllItems];
     
-    [menu addItem:[NSMenuItem separatorItem]];
+    LookinDisplayItem *displayItem = self.rightClickingDisplayItem;
+    if (!displayItem) {
+        return;
+    }
+    
+    if (!displayItem.isUserCustom) {
+        [menu addItem:({
+            NSMenuItem *item = [NSMenuItem new];
+            item.target = self;
+            item.action = @selector(_handleFocusCurrentItem:);
+            item.title = NSLocalizedString(@"Focus", nil);
+            item;
+        })];
+        [menu addItem:({
+            NSMenuItem *item = [NSMenuItem new];
+            item.target = self;
+            item.action = @selector(_handlePrintItem:);
+            item.title = NSLocalizedString(@"Print", nil);
+            item;
+        })];
+        [menu addItem:[NSMenuItem separatorItem]];        
+    }
+
+    if (displayItem.isExpandable) {
+        if (displayItem.isExpanded) {
+            [menu addItem:({
+                NSMenuItem *item = [NSMenuItem new];
+                item.target = self;
+                item.action = @selector(_handleCollapseChildren:);
+                item.title = NSLocalizedString(@"Collapse children", nil);
+                item;
+            })];
+        } else {
+            [menu addItem:({
+                NSMenuItem *item = [NSMenuItem new];
+                item.target = self;
+                item.action = @selector(_handleExpandRecursively:);
+                item.title = NSLocalizedString(@"Expand recursively", nil);
+                item;
+            })];
+        }
+        [menu addItem:[NSMenuItem separatorItem]];
+    }
+    
     [menu addItem:({
         NSMenuItem *item = [NSMenuItem new];
         item.enabled = YES;
@@ -647,46 +678,26 @@ extern NSString *const LKAppShowConsoleNotificationName;
         item.title = NSLocalizedString(@"Hide screenshot this time", nil);
         item;
     })];
-    [menu addItem:({
-        NSMenuItem *item = [NSMenuItem new];
-        item.enabled = YES;
-        item.target = self;
-        item.action = @selector(_handleExportScreenshot:);
-        item.title = NSLocalizedString(@"Export screenshot…", nil);
-        item;
-    })];
     
-    [menu addItem:[NSMenuItem separatorItem]];
-    [menu addItem:({
-        NSMenuItem *item = [NSMenuItem new];
-        item.target = self;
-        item.action = @selector(_handleHideScreenshotForever);
-        item.title = NSLocalizedString(@"Hide screenshot forever…", nil);
-        item;
-    })];
-    return menu;
-}
-
-- (void)menuNeedsUpdate:(NSMenu *)menu {
-    LookinDisplayItem *displayItem = self.rightClickingDisplayItem;
-    if (!displayItem) {
-        return;
+    if (!displayItem.isUserCustom && displayItem.groupScreenshot) {
+        [menu addItem:({
+            NSMenuItem *item = [NSMenuItem new];
+            item.enabled = YES;
+            item.target = self;
+            item.action = @selector(_handleExportScreenshot:);
+            item.title = NSLocalizedString(@"Export screenshot…", nil);
+            item;
+        })];
+        
+        [menu addItem:[NSMenuItem separatorItem]];
+        [menu addItem:({
+            NSMenuItem *item = [NSMenuItem new];
+            item.target = self;
+            item.action = @selector(_handleHideScreenshotForever);
+            item.title = NSLocalizedString(@"Hide screenshot forever…", nil);
+            item;
+        })];
     }
-    NSMenuItem *item_expand = [menu itemAtIndex:0];
-    NSMenuItem *item_collapse = [menu itemAtIndex:1];
-//    NSMenuItem *item_cancelPreview = [menu itemAtIndex:3];
-    NSMenuItem *item_export = [menu itemAtIndex:4];
-    
-    // 设置“全部展开”和“全部收起”的 enabled
-    if (displayItem.isExpandable) {
-        item_expand.enabled = YES;
-        item_collapse.enabled = YES;
-    } else {
-        item_expand.enabled = NO;
-        item_collapse.enabled = NO;
-    }
-    
-    item_export.enabled = !!displayItem.groupScreenshot;
 }
 
 - (void)menuDidClose:(NSMenu *)menu {
@@ -705,7 +716,7 @@ extern NSString *const LKAppShowConsoleNotificationName;
 
 - (void)_handleFocusCurrentItem:(NSMenuItem *)menuItem {
     LookinDisplayItem *item = self.rightClickingDisplayItem;
-    [self.dataSource focusThisItem:item];
+    [self.dataSource focusDisplayItem:item];
 }
 
 - (void)_handleExpandRecursively:(NSMenuItem *)menuItem {

@@ -16,6 +16,9 @@
 #import "LookinDisplayItemDetail.h"
 #import "LookinDisplayItem.h"
 #import "LookinAppInfo.h"
+#import "LKMessageManager.h"
+#import "LKServerVersionRequestor.h"
+#import "LKVersionComparer.h"
 
 @interface LKStaticHierarchyDataSource ()
 
@@ -64,6 +67,7 @@
     }];
     
     [[LKStaticAsyncUpdateManager sharedInstance] updateAll];
+    [self updateMessageStatus];
 }
 
 - (void)modifyWithDisplayItemDetail:(LookinDisplayItemDetail *)detail {
@@ -98,10 +102,18 @@
     if (didChangeHiddenAlpha) {
         [self.itemDidChangeHiddenAlphaValue sendNext:displayItem];
     }
-    
+
+    BOOL attrChanged = NO;
     if (detail.attributesGroupList.count) {
         displayItem.attributesGroupList = detail.attributesGroupList;
-        [self.itemDidChangeAttrGroup sendNext:displayItem];
+        attrChanged = YES;
+    }
+    if (detail.customAttrGroupList.count) {
+        displayItem.customAttrGroupList = detail.customAttrGroupList;
+        attrChanged = YES;
+    }
+    if (attrChanged) {
+        [self.itemDidChangeAttrGroup sendNext:displayItem];        
     }
 }
 
@@ -123,6 +135,35 @@
     item.bounds = bounds;
     
     [self.itemsDidChangeFrame sendNext:item];
+}
+
+- (void)updateMessageStatus {
+    if (self.serverSideIsSwiftProject && self.appInfo.swiftEnabledInLookinServer == -1) {
+        [[LKMessageManager sharedInstance] addMessage:LKMessage_SwiftSubspec];
+    } else {
+        [[LKMessageManager sharedInstance] removeMessage:LKMessage_SwiftSubspec];
+    }
+    
+    if ([self queryIfUsingNewestServerVersion]) {
+        [[LKMessageManager sharedInstance] removeMessage:LKMessage_NewServerVersion];
+    } else {
+        [[LKMessageManager sharedInstance] addMessage:LKMessage_NewServerVersion];
+    }
+}
+
+/// 如果 Server 端使用的是最新版，或者无法判断，那么就返回 YES
+- (BOOL)queryIfUsingNewestServerVersion {
+    NSString *newestVersion = [[LKServerVersionRequestor shared] query];
+    if (!newestVersion) {
+        return YES;
+    }
+    NSString *userVersion = [self.appInfo serverReadableVersion];
+    if (!userVersion) {
+        // LookinServer 1.2.3 之前的版本没有该字段
+        return NO;
+    }
+    BOOL isNew = [LKVersionComparer compareWithNewest:newestVersion user:userVersion];
+    return isNew;
 }
 
 @end

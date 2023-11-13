@@ -12,6 +12,7 @@
 #import "LKTableView.h"
 #import "LKTutorialManager.h"
 #import "LKHierarchyDataSource+KeyDown.h"
+#import "LKPreferenceManager.h"
 
 @interface LKHierarchyController ()
 
@@ -19,36 +20,12 @@
 
 @implementation LKHierarchyController
 
-
 - (instancetype)initWithDataSource:(LKHierarchyDataSource *)dataSource {
-    if (self = [self initWithContainerView:nil]) {
+    LKHierarchyView *hierarchyView = [[LKHierarchyView alloc] initWithDataSource:dataSource];
+    hierarchyView.delegate = self;
+    if (self = [self initWithContainerView:hierarchyView]) {
         _dataSource = dataSource;
-        
-        @weakify(self);
-        [RACObserve(dataSource, selectedItem) subscribeNext:^(LookinDisplayItem * _Nullable item) {
-            @strongify(self);
-            [self.hierarchyView scrollToMakeItemVisible:item];
-        }];
-        
-        RAC(self.hierarchyView, displayItems) = [RACObserve(self.dataSource, displayingFlatItems) doNext:^(id  _Nullable x) {
-            @strongify(self);
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                [self.hierarchyView updateGuidesWithHoveredItem:self.dataSource.hoveredItem];
-            });
-        }];
-        
-        [[RACObserve(self.dataSource, hoveredItem) distinctUntilChanged] subscribeNext:^(LookinDisplayItem * _Nullable x) {
-            @strongify(self);
-            [self.hierarchyView updateGuidesWithHoveredItem:x];
-        }];
-        
-        [[[self.dataSource.stateSignal filter:^BOOL(NSNumber * _Nullable value) {
-            LKHierarchyDataSourceState state = value.unsignedIntegerValue;
-            return state == LKHierarchyDataSourceStateFocus;
-        }] deliverOnMainThread] subscribeNext:^(id  _Nullable x) {
-            @strongify(self);
-            [self.hierarchyView activateFocused];
-        }];
+        _hierarchyView = hierarchyView;
     }
     return self;
 }
@@ -116,13 +93,27 @@
 }
 
 - (void)hierarchyView:(LKHierarchyView *)view didDoubleClickItem:(LookinDisplayItem *)item {
-    if (!item.isExpandable) {
+    BOOL hasShowedAsk = [LKPreferenceManager popupToAskDoubleClickBehaviorIfNeededWithWindow:self.view.window];
+    if (hasShowedAsk) {
         return;
     }
-    if (item.isExpanded) {
-        [self.dataSource collapseItem:item];
+
+    LookinDoubleClickBehavior behavior = [[LKPreferenceManager mainManager] doubleClickBehavior];
+    if (behavior == LookinDoubleClickBehaviorCollapse) {
+        if (!item.isExpandable) {
+            return;
+        }
+        if (item.isExpanded) {
+            [self.dataSource collapseItem:item];
+        } else {
+            [self.dataSource expandItem:item];
+        }
+
+    } else if (behavior == LookinDoubleClickBehaviorFocus) {
+        [self.dataSource focusDisplayItem:item];
+        
     } else {
-        [self.dataSource expandItem:item];
+        NSAssert(NO, @"");
     }
 }
 
@@ -159,23 +150,6 @@
                 [self.hierarchyView scrollToMakeItemVisible:self.dataSource.selectedItem];
             });
         }
-    }
-}
-
-- (void)hierarchyView:(LKHierarchyView *)view shouldFocusItem:(LookinDisplayItem *)item {
-    if (item) {
-        [self.dataSource focusThisItem:item];
-    }
-}
-
-- (void)cancelFocusedOnHierarchyView:(LKHierarchyView *)view {
-    [self.hierarchyView deactivateFocused];
-    [self.dataSource endSearch];
-    if (self.dataSource.selectedItem) {
-        // 结束搜索，滚动到选中的 item
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self.hierarchyView scrollToMakeItemVisible:self.dataSource.selectedItem];
-        });
     }
 }
 
