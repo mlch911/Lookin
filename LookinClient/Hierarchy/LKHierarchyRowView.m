@@ -49,10 +49,14 @@
 }
 
 - (void)setDisplayItem:(LookinDisplayItem *)displayItem {
-    _displayItem = displayItem;
-    
-    displayItem.rowViewDelegate = self;
-    [self reRender];
+    if (displayItem.rowViewDelegate != self) {
+        // 在 _displayItem == displayItem 的情况下，displayItem.rowViewDelegate 仍然可能不指向 self，因此这里必须重新配置一下，否则会有 Bug：先选中一个 view 并进入 focus 状态，然后退出 focus，然后就发现那个 view 的选中态无法取消
+        displayItem.rowViewDelegate = self;
+    }
+    if (displayItem != _displayItem) {
+        _displayItem = displayItem;
+        [self reRender];
+    }
 }
 
 - (void)reRender {
@@ -65,7 +69,6 @@
     self.indentLevel = self.displayItem.indentLevel - self.minIndentLevel;
     [self updateEventsButton];
     [self updateExpandStatus];
-    [self updateContentWidth];
     [self updateStrikethroughLayer];
     [self _updateLabelStringsAndImageViewAlpha];
     [self _updateLabelsFonts];
