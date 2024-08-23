@@ -181,6 +181,8 @@
 		D4224EEF2358ED3400ED9626 /* LKMeasureController.m in Sources */ = {isa = PBXBuildFile; fileRef = D4224EEE2358ED3400ED9626 /* LKMeasureController.m */; };
 		D4D1B2D32353975A002A5071 /* LKWindowToolbarScaleView.m in Sources */ = {isa = PBXBuildFile; fileRef = D4D1B2D22353975A002A5071 /* LKWindowToolbarScaleView.m */; };
 		D4E1FD66236169130070DFB8 /* LKMeasureResultLineData.m in Sources */ = {isa = PBXBuildFile; fileRef = D4E1FD65236169130070DFB8 /* LKMeasureResultLineData.m */; };
+		F7C2F32F2B02222C003AD0E7 /* LKMenuPopoverWirelessDevicesListController.m in Sources */ = {isa = PBXBuildFile; fileRef = F7C2F32E2B02222C003AD0E7 /* LKMenuPopoverWirelessDevicesListController.m */; };
+		F7C2F3322B02348F003AD0E7 /* LKLaunchWirelessDeviceView.m in Sources */ = {isa = PBXBuildFile; fileRef = F7C2F3312B02348F003AD0E7 /* LKLaunchWirelessDeviceView.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -567,6 +569,10 @@
 		D4E1FD64236169130070DFB8 /* LKMeasureResultLineData.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LKMeasureResultLineData.h; sourceTree = "<group>"; };
 		D4E1FD65236169130070DFB8 /* LKMeasureResultLineData.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LKMeasureResultLineData.m; sourceTree = "<group>"; };
 		D97552B9BF9170E090F8CAA7 /* Pods-LookinClient.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-LookinClient.debug.xcconfig"; path = "Target Support Files/Pods-LookinClient/Pods-LookinClient.debug.xcconfig"; sourceTree = "<group>"; };
+		F7C2F32D2B02222C003AD0E7 /* LKMenuPopoverWirelessDevicesListController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LKMenuPopoverWirelessDevicesListController.h; sourceTree = "<group>"; };
+		F7C2F32E2B02222C003AD0E7 /* LKMenuPopoverWirelessDevicesListController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LKMenuPopoverWirelessDevicesListController.m; sourceTree = "<group>"; };
+		F7C2F3302B02348F003AD0E7 /* LKLaunchWirelessDeviceView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LKLaunchWirelessDeviceView.h; sourceTree = "<group>"; };
+		F7C2F3312B02348F003AD0E7 /* LKLaunchWirelessDeviceView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LKLaunchWirelessDeviceView.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1078,10 +1084,12 @@
 				D4D1B2D22353975A002A5071 /* LKWindowToolbarScaleView.m */,
 				A2C71CBC282165DB0056D991 /* LKWindowToolbarAppButton.h */,
 				A2C71CBD282165DB0056D991 /* LKWindowToolbarAppButton.m */,
+				AAA8C10521CC17680017A345 /* LKMenuPopoverAppsListController.h */,
 				AAA8C0F821CC17680017A345 /* LKMenuPopoverAppsListController.m */,
 				AA049A1521E61B85008C6366 /* LKMenuPopoverSettingController.h */,
 				AA049A1621E61B85008C6366 /* LKMenuPopoverSettingController.m */,
-				AAA8C10521CC17680017A345 /* LKMenuPopoverAppsListController.h */,
+				F7C2F32D2B02222C003AD0E7 /* LKMenuPopoverWirelessDevicesListController.h */,
+				F7C2F32E2B02222C003AD0E7 /* LKMenuPopoverWirelessDevicesListController.m */,
 			);
 			path = Toolbar;
 			sourceTree = "<group>";
@@ -1106,10 +1114,12 @@
 		AAA8C11421CC17680017A345 /* Launch */ = {
 			isa = PBXGroup;
 			children = (
-				AAA8C11821CC17680017A345 /* LKLaunchAppView.m */,
 				AAA8C11521CC17680017A345 /* LKLaunchAppView.h */,
-				AAA8C11621CC17680017A345 /* LKLaunchViewController.m */,
+				AAA8C11821CC17680017A345 /* LKLaunchAppView.m */,
+				F7C2F3302B02348F003AD0E7 /* LKLaunchWirelessDeviceView.h */,
+				F7C2F3312B02348F003AD0E7 /* LKLaunchWirelessDeviceView.m */,
 				AAA8C11921CC17680017A345 /* LKLaunchViewController.h */,
+				AAA8C11621CC17680017A345 /* LKLaunchViewController.m */,
 				AAA8C11721CC17680017A345 /* LKLaunchWindowController.h */,
 				AAA8C11A21CC17680017A345 /* LKLaunchWindowController.m */,
 			);
@@ -1421,6 +1431,7 @@
 				AAE61CCE22A5063F00B3FB9F /* LKInputSearchSuggestionsRowView.m in Sources */,
 				A74C63072B540FDD0068FBB8 /* CwlDemangle.swift in Sources */,
 				AAA8C12621CC17680017A345 /* LKProgressIndicatorView.m in Sources */,
+				F7C2F32F2B02222C003AD0E7 /* LKMenuPopoverWirelessDevicesListController.m in Sources */,
 				A74C63122B5429B60068FBB8 /* LookinAutoLayoutConstraint+LookinClient.m in Sources */,
 				AAA8C12A21CC17680017A345 /* LKBaseControl.m in Sources */,
 				AACBACAF22AE983F00A8F89D /* LKDashboardAttributeRectView.m in Sources */,
@@ -1435,6 +1446,7 @@
 				A78FCEB42B334D3300F1D307 /* LKDanceUIAttrMaker.m in Sources */,
 				AAB65C092320FC30001E4299 /* LKDashboardSearchCardView.m in Sources */,
 				AA290358229824A400073B65 /* LKPanelContentView.m in Sources */,
+				F7C2F3322B02348F003AD0E7 /* LKLaunchWirelessDeviceView.m in Sources */,
 				A74C630F2B54202E0068FBB8 /* LookinObject+LookinClient.m in Sources */,
 				AAA8C15E21CC17680017A345 /* LKLaunchViewController.m in Sources */,
 				AA7F157822C0F2B9004436AD /* LKConnectionRequest.m in Sources */,

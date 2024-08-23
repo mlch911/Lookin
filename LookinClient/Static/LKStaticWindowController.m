@@ -31,6 +31,8 @@
 #import "LKMessageManager.h"
 #import "LKServerVersionRequestor.h"
 #import "LKVersionComparer.h"
+#import "LKConnectionManager.h"
+#import "LKMenuPopoverWirelessDevicesListController.h"
 
 @import AppCenter;
 @import AppCenterAnalytics;
@@ -112,32 +114,12 @@
         LKMenuPopoverAppsListController *vc = [[LKMenuPopoverAppsListController alloc] initWithApps:apps source:source];
         NSPopover *popover = [[NSPopover alloc] init];
         @weakify(popover);
+        @weakify(self);
         vc.didSelectApp = ^(LKInspectableApp *app) {
+            @strongify(self);
             @strongify(popover);
             [popover close];
-            
-            if (app.serverVersionError) {
-                if (app.serverVersionError.code == LookinErrCode_ServerVersionTooLow) {
-                    [LKHelper openLookinWebsiteWithPath:@"faq/server-version-too-low/"];
-                } else {
-                    [LKHelper openLookinWebsiteWithPath:@"faq/server-version-too-high/"];
-                }
-                
-            } else {
-                [self.viewController.progressView animateToProgress:InitialIndicatorProgressWhenFetchHierarchy];
-                
-                BOOL isTheSameApp = [[LKAppsManager sharedInstance].inspectingApp.appInfo isEqualToAppInfo:app.appInfo];
-                
-                [[app fetchHierarchyData] subscribeNext:^(LookinHierarchyInfo *info) {
-                    [self.viewController.progressView finishWithCompletion:nil];
-                    [LKAppsManager sharedInstance].inspectingApp = app;
-                    [[LKStaticHierarchyDataSource sharedInstance] reloadWithHierarchyInfo:info keepState:isTheSameApp];
-                    
-                } error:^(NSError * _Nullable error) {
-                    AlertError(error, self.window);
-                    [self.viewController.progressView resetToZero];
-                }];
-            }
+            [self _enterApp:app];
         };
         
         popover.behavior = NSPopoverBehaviorTransient;
@@ -151,6 +133,72 @@
     }];
 }
 
+- (void)popupNotConnnectWirelessInspectableApps {
+	__auto_type devices = [LKConnectionManager.sharedInstance getAllWirelessDevices];
+	__auto_type vc = [[LKMenuPopoverWirelessDevicesListController alloc] initWithDevices:devices];
+	NSView *appItemView = self.toolbarItemsMap[LKToolBarIdentifier_App_Wireless].view;
+	NSPopover *popover = [[NSPopover alloc] init];
+    @weakify(popover);
+	@weakify(self);
+	vc.didSelectDevice = ^(ECOChannelDeviceInfo *device) {
+		@strongify(popover);
+		[popover close];
+        
+        void (^connectBlock)(ECOChannelDeviceInfo *) = ^(ECOChannelDeviceInfo *device){
+            if (!device.isConnected) {
+                NSAssert(NO, @"");
+                return;
+            }
+            [[[LKAppsManager.sharedInstance fetchAppInfosWithImage:NO localInfos:nil] deliverOnMainThread] subscribeNext:^(NSArray<LKInspectableApp *> *apps) {
+                @strongify(self);
+                LKInspectableApp *app = [apps lookin_firstFiltered:^BOOL(LKInspectableApp *app) {
+                    return app.channel == device;
+                }];
+                NSAssert(app != nil, @"");
+                [self _enterApp:app];
+            }];
+        };
+        
+        if (!device.authorizedType) {
+            [[LKConnectionManager.sharedInstance connectToWireless:device] subscribeNext:^(ECOChannelDeviceInfo *d) {
+                connectBlock(d);
+            }];
+        } else {
+            connectBlock(device);
+        }
+	};
+	popover.behavior = NSPopoverBehaviorTransient;
+	popover.animates = NO;
+	popover.contentSize = vc.bestSize;
+	popover.contentViewController = vc;
+	[popover showRelativeToRect:NSMakeRect(0, 0, appItemView.bounds.size.width, appItemView.bounds.size.height) ofView:appItemView preferredEdge:NSRectEdgeMaxY];
+}
+
+- (void)_enterApp:(LKInspectableApp *)app {
+    if (app.serverVersionError) {
+        if (app.serverVersionError.code == LookinErrCode_ServerVersionTooLow) {
+            [LKHelper openLookinWebsiteWithPath:@"faq/server-version-too-low/"];
+        } else {
+            [LKHelper openLookinWebsiteWithPath:@"faq/server-version-too-high/"];
+        }
+        
+    } else {
+        [self.viewController.progressView animateToProgress:InitialIndicatorProgressWhenFetchHierarchy];
+        
+        BOOL isTheSameApp = [[LKAppsManager sharedInstance].inspectingApp.appInfo isEqualToAppInfo:app.appInfo];
+        
+        [[app fetchHierarchyData] subscribeNext:^(LookinHierarchyInfo *info) {
+            [self.viewController.progressView finishWithCompletion:nil];
+            [LKAppsManager sharedInstance].inspectingApp = app;
+            [[LKStaticHierarchyDataSource sharedInstance] reloadWithHierarchyInfo:info keepState:isTheSameApp];
+            
+        } error:^(NSError * _Nullable error) {
+            AlertError(error, self.window);
+            [self.viewController.progressView resetToZero];
+        }];
+    }
+}
+
 #pragma mark - NSToolbarDelegate
 
 - (NSArray<NSToolbarItemIdentifier> *)toolbarAllowedItemIdentifiers:(NSToolbar *)toolbar {
@@ -158,7 +206,7 @@
 }
 
 - (NSArray<NSToolbarItemIdentifier> *)toolbarDefaultItemIdentifiers:(NSToolbar *)toolbar {
-    NSMutableArray *ret = @[LKToolBarIdentifier_Reload, LKToolBarIdentifier_FastMode, LKToolBarIdentifier_App, NSToolbarFlexibleSpaceItemIdentifier, LKToolBarIdentifier_Dimension, LKToolBarIdentifier_Rotation, LKToolBarIdentifier_Setting, NSToolbarFlexibleSpaceItemIdentifier, LKToolBarIdentifier_Scale, NSToolbarFlexibleSpaceItemIdentifier, LKToolBarIdentifier_Measure, LKToolBarIdentifier_Console].mutableCopy;
+    NSMutableArray *ret = @[LKToolBarIdentifier_Reload, LKToolBarIdentifier_FastMode, LKToolBarIdentifier_App, LKToolBarIdentifier_App_Wireless, NSToolbarFlexibleSpaceItemIdentifier, LKToolBarIdentifier_Dimension, LKToolBarIdentifier_Rotation, LKToolBarIdentifier_Setting, NSToolbarFlexibleSpaceItemIdentifier, LKToolBarIdentifier_Scale, NSToolbarFlexibleSpaceItemIdentifier, LKToolBarIdentifier_Measure, LKToolBarIdentifier_Console].mutableCopy;
     if ([[[LKMessageManager sharedInstance] queryMessages] count] > 0) {
         [ret addObject:LKToolBarIdentifier_Message];
         [MSACAnalytics trackEvent:@"Show Notification"];
@@ -181,6 +229,9 @@
         } else if ([item.itemIdentifier isEqualToString:LKToolBarIdentifier_App]) {
             item.target = self;
             item.action = @selector(_handleApp);
+        } else if ([item.itemIdentifier isEqualToString:LKToolBarIdentifier_App_Wireless]) {
+            item.target = self;
+            item.action = @selector(_handleWirelessApp);
         } else if ([item.itemIdentifier isEqualToString:LKToolBarIdentifier_Rotation]) {
             item.target = self;
             item.action = @selector(_handleFreeRotation);
@@ -257,6 +308,10 @@
 - (void)_handleApp {
     // 停止可能存在的刷新倒计时    
     [self popupAllInspectableAppsWithSource:MenuPopoverAppsListControllerEventSourceAppButton];
+}
+
+- (void)_handleWirelessApp {
+	[self popupNotConnnectWirelessInspectableApps];
 }
 
 - (void)_handleSetting:(NSButton *)button {

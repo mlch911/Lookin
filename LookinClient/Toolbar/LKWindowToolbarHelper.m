@@ -20,6 +20,7 @@ NSToolbarItemIdentifier const LKToolBarIdentifier_Scale = @"1";
 NSToolbarItemIdentifier const LKToolBarIdentifier_Setting = @"2";
 NSToolbarItemIdentifier const LKToolBarIdentifier_Reload = @"3";
 NSToolbarItemIdentifier const LKToolBarIdentifier_App = @"5";
+NSToolbarItemIdentifier const LKToolBarIdentifier_App_Wireless = @"6";
 NSToolbarItemIdentifier const LKToolBarIdentifier_AppInReadMode = @"12";
 NSToolbarItemIdentifier const LKToolBarIdentifier_Add = @"13";
 NSToolbarItemIdentifier const LKToolBarIdentifier_Remove = @"14";
@@ -193,6 +194,18 @@ static NSString * const Key_BindingAppInfo = @"AppInfo";
         }];
         return item;
     }
+	
+	if ([identifier isEqualToString:LKToolBarIdentifier_App_Wireless]) {
+		NSButton *button = [NSButton new];
+		[button setTitle:@"ᯤ"];
+		button.bezelStyle = NSBezelStyleTexturedRounded;
+		
+		NSToolbarItem *item = [[NSToolbarItem alloc] initWithItemIdentifier:LKToolBarIdentifier_App_Wireless];
+		item.label = NSLocalizedString(@"Wireless Connections", nil);
+		item.view = button;
+		item.minSize = NSMakeSize(48, 34);
+		return item;
+	}
     
     if ([identifier isEqualToString:LKToolBarIdentifier_Console]) {
         NSImage *image = NSImageMake(@"icon_console");

@@ -1,6 +1,7 @@
 "Reload" = "Reload";
 "Syncing…" = "Syncing…";
 "Select App" = "Select App";
+"Wireless Connections" = "Wireless Connections";
 "View" = "View";
 "Zoom" = "Zoom";
 "Console" = "Console";
@@ -218,3 +219,4 @@
 "Some layer data failed to transmit." = "Some layer data failed to transmit.";
 "It may be due to changes in the layer structure within the iOS app. You can try reloading the entire structure in Lookin." = "It may be due to changes in the layer structure within the iOS app. You can try reloading the entire structure in Lookin.";
 "properties or methods" = "properties or methods";
+"Wireless Connection rejected" = "Wireless Connection rejected.";

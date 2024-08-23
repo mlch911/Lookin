@@ -42,6 +42,14 @@
 /// 在调用该方法发请求时，如果已有相同 type 的旧 request 尚未返回结果，则之前的旧 request 会被报告 Error，然后被丢弃
 - (RACSignal *)requestWithType:(unsigned int)requestType data:(NSObject *)requestData channel:(Lookin_PTChannel *)channel;
 
+- (RACSignal<ECOChannelDeviceInfo *> *)connectToWireless:(ECOChannelDeviceInfo *)device;
+
+- (NSArray<ECOChannelDeviceInfo *> *)getAllWirelessDevices;
+
+- (BOOL)isWhiteListDevice:(ECOChannelDeviceInfo *)device;
+
+- (void)setWhiteListDevice:(ECOChannelDeviceInfo *)device white:(BOOL)white;
+
 /// 取消先前使用 requestWithType:data:channel: 方法发送的尚未完成的 request，这个 request 会被报告为 completion
 - (void)cancelRequestWithType:(unsigned int)requestType channel:(Lookin_PTChannel *)channel;
 

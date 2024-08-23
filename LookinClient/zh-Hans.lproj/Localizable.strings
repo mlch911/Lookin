@@ -1,6 +1,7 @@
 "Reload" = "刷新";
 "Syncing…" = "图像传输中…";
 "Select App" = "App 切换";
+"Wireless Connections" = "无线连接";
 "View" = "图像";
 "Zoom" = "大小";
 "Console" = "控制台";
@@ -216,3 +217,4 @@
 "Some layer data failed to transmit." = "某些图层信息传输失败";
 "It may be due to changes in the layer structure within the iOS app. You can try reloading the entire structure in Lookin." = "可能因为 iOS App 中的图层结构有变化，可尝试在 Lookin 中整体重新刷新。";
 "properties or methods" = "搜索属性或方法";
+"Wireless Connection rejected" = "无线连接被拒绝";

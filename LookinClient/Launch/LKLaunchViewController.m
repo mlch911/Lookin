@@ -16,6 +16,8 @@
 #import "LKPreferenceManager.h"
 #import "LKTextControl.h"
 #import "LKPerformanceReporter.h"
+#import "LKConnectionManager.h"
+#import "LKMenuPopoverWirelessDevicesListController.h"
 
 @interface LKLaunchViewController () <NSGestureRecognizerDelegate>
 
@@ -25,6 +27,7 @@
 @property(nonatomic, strong) NSProgressIndicator *reloadingIndicator;
 @property(nonatomic, strong) LKLabel *noAppsTitleLabel;
 @property(nonatomic, strong) LKTextControl *tutorialControl;
+@property(nonatomic, strong) LKTextControl *wirelessControl;
 @property(nonatomic, copy) void (^crashBlock)(void);
 
 @property(nonatomic, assign) BOOL isEnteringApp;
@@ -46,7 +49,7 @@
 
 - (NSView *)makeContainerView {
     _appViewInterSpace = 10;
-    _contentHeight = 400;
+    _contentHeight = 440;
     _contentHorInset = 30;
     
     LKVisualEffectView *containerView = [LKVisualEffectView new];
@@ -69,6 +72,17 @@
     
     [self.bottomIndicatorView animateToProgress:.7 duration:0.5];
     
+    self.wirelessControl = [LKTextControl new];
+    self.wirelessControl.layer.cornerRadius = 4;
+    self.wirelessControl.layer.borderWidth = 1;
+    self.wirelessControl.layer.borderColor = NSColor.grayColor.CGColor;
+    self.wirelessControl.label.stringValue = [NSString stringWithFormat:@"ᯤ\n%@", NSLocalizedString(@"Wireless Connections", nil)];
+    self.wirelessControl.label.textColor = [NSColor linkColor];
+    self.wirelessControl.label.font = NSFontMake(12);
+    self.wirelessControl.adjustAlphaWhenClick = YES;
+    [self.wirelessControl addTarget:self clickAction:@selector(_handleWireless)];
+    [containerView addSubview:self.wirelessControl];
+    
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         // 延时一下，因为如果有 USB 设备被连接，则需要一定时间来使 ConnectionManager 检测到，这个时间实际实验大概 0.1 秒，这里稍微宽裕一点给个 0.2 秒
         [self _reloadWithAutoEntering:YES];
@@ -87,6 +101,8 @@
     }
 
     $(self.tutorialControl).sizeToFit.horAlign.offsetX(3).bottom(14);
+    
+    $(self.wirelessControl).sizeToFit.horAlign.offsetX(3).bottom(40);
     
     __block CGFloat posX = _contentHorInset;
     [self.appViews enumerateObjectsUsingBlock:^(LKLaunchAppView * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
@@ -125,9 +141,11 @@
             [self _renderWithApps:apps];
 
             // 每 1.5 秒刷新一次
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                [self _reloadWithAutoEntering:NO];
-            });
+            
+            [self performSelector:_cmd withObject:nil afterDelay:1.5];
+//            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+//                [self _reloadWithAutoEntering:NO];
+//            });
         }
     }];
 }
@@ -246,6 +264,51 @@
     
     [self.reloadingIndicator removeFromSuperview];
     self.reloadingIndicator = nil;
+}
+
+- (void)_handleWireless {
+    __auto_type devices = [LKConnectionManager.sharedInstance getAllWirelessDevices];
+    __auto_type vc = [[LKMenuPopoverWirelessDevicesListController alloc] initWithDevices:devices];
+    NSView *appItemView = self.wirelessControl;
+    NSPopover *popover = [[NSPopover alloc] init];
+    @weakify(popover);
+    @weakify(self);
+    vc.didSelectDevice = ^(ECOChannelDeviceInfo *device) {
+        @strongify(popover);
+        [popover close];
+        
+        void (^connectBlock)(ECOChannelDeviceInfo *) = ^(ECOChannelDeviceInfo *device){
+            if (!device.isConnected) {
+                NSAssert(NO, @"");
+                return;
+            }
+            @strongify(self);
+            [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(_reloadWithAutoEntering:) object:nil];
+            [self.bottomIndicatorView animateToProgress:.8 duration:1];
+            @weakify(self);
+            [[[LKAppsManager.sharedInstance fetchAppInfosWithImage:NO localInfos:self.appInfos] deliverOnMainThread] subscribeNext:^(NSArray<LKInspectableApp *> *apps) {
+                @strongify(self);
+                LKInspectableApp *app = [apps lookin_firstFiltered:^BOOL(LKInspectableApp *app) {
+                    return app.channel == device;
+                }];
+                NSAssert(app != nil, @"");
+                [self _enterApp:app];
+            }];
+        };
+        
+        if (!device.authorizedType) {
+            [[LKConnectionManager.sharedInstance connectToWireless:device] subscribeNext:^(ECOChannelDeviceInfo *d) {
+                connectBlock(d);
+            }];
+        } else {
+            connectBlock(device);
+        }
+    };
+    popover.behavior = NSPopoverBehaviorTransient;
+    popover.animates = NO;
+    popover.contentSize = vc.bestSize;
+    popover.contentViewController = vc;
+    [popover showRelativeToRect:NSMakeRect(0, 0, appItemView.bounds.size.width, appItemView.bounds.size.height) ofView:appItemView preferredEdge:NSRectEdgeMaxY];
 }
 
 - (void)_handleTutorial {
